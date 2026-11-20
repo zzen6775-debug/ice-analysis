@@ -5,26 +5,26 @@ __pycache__/
 .venv/
 venv/
 
-# analysis outputs (regenerate them, do not commit)
-fronts.csv
-fronts.csv.qprofile
+# generated analysis outputs
 origin_data/
 origin_output/
-*.png
+frames/
+fronts.csv.qprofile
 
-# GROMACS frames
+# GROMACS frames and binaries
 *.gro
 *.xtc
 *.trr
 frames.tar.gz
 
-# Origin
+# Origin project files
 *.opju
 *.opj
-*.otp
-*.otpu
 
 # OS
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# NOTE: fronts.csv at the repository root is the bundled sample data and is
+# intentionally tracked. Generated results go to origin_data/ and are ignored.

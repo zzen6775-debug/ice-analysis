@@ -1,32 +1,36 @@
 // =====================================================================
-// 上下两个冰前沿同时作图：4 个体系 x 2 个前沿 = 8 条曲线
+// Both ice fronts at once: 4 systems x 2 fronts = 8 curves
 //
-// 用法：命令窗口（Shift+F3）输入
-//        run.file("G:\MD_useful\ice_analysis\plot_fronts_both.ogs")
+// Run inside Origin: open the Command Window (Shift+F3) and type
+//     run.file("FULL_PATH_TO_THIS_FILE")
 //
-// 数据来源：origin_data\origin_fronts_both.csv
-//   列：t_ns, HEMA_lower, HEMA_upper, MMA_lower, MMA_upper,
-//       PMMA10_lower, PMMA10_upper, PMMA20_lower, PMMA20_upper
-//   下前沿随时间下降，上前沿随时间上升，形成一组对称的线
+// BEFORE RUNNING: set root$ below to the folder that holds your CSV files.
+//
+// The lower front moves down over time (z decreases) and the upper front
+// moves up (z increases), so the curves form two symmetric groups.
 // =====================================================================
 
-string outdir$ = "G:\MD_useful\ice_analysis\origin_output";
+// ---- EDIT THIS ----
+string root$ = "G:\MD_useful\ice_analysis";
+// -------------------
 
-// ---- 1. 新建工作簿并导入 ----
+string outdir$ = root$ + "\origin_output";
+
+// ---- 1. new workbook and import ----
 newbook name:="BothFronts" sheet:=1;
-impasc fname:="G:\MD_useful\ice_analysis\origin_data\origin_fronts_both.csv";
+impasc fname:=root$ + "\origin_data\origin_fronts_both.csv";
 
-// ---- 2. 第 1 列设为 X ----
+// ---- 2. first column as X ----
 wks.col1.type = 4;
 
-// ---- 3. 8 条曲线：X=第1列，Y=第2..9列 ----
+// ---- 3. eight curves: X = col 1, Y = cols 2..9 ----
 plotxy iy:=(1,2:9) plot:=202;
 
-// ---- 4. 轴标题 ----
+// ---- 4. axis titles ----
 xb.text$ = "t (ns)";
 yl.text$ = "front position (nm)";
 
-// ---- 5. 导出 PNG ----
+// ---- 5. export ----
 expGraph type:=png path:=outdir$ filename:="fronts_both" overwrite:=replace;
 type "PNG exported to " + outdir$;
 
