@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# analysis outputs (regenerate them, do not commit)
+fronts.csv
+fronts.csv.qprofile
+origin_data/
+origin_output/
+*.png
+
+# GROMACS frames
+*.gro
+*.xtc
+*.trr
+frames.tar.gz
+
+# Origin
+*.opju
+*.opj
+*.otp
+*.otpu
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

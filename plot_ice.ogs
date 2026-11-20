@@ -1,0 +1,34 @@
+// =====================================================================
+// 冰层生长：导入 CSV -> 作图 -> 设轴标题 -> 导出 PNG
+//
+// 用法：命令窗口（Shift+F3）输入
+//        run.file("G:\MD_useful\ice_analysis\plot_ice.ogs")
+//
+// 修订：
+//   v6 删除 yl.from = 0（2024 版不支持该属性名，会报
+//      "YL.FROM is illegal name"），纵轴范围请在图上双击轴手动改。
+//      xb.text$ / yl.text$ 设轴标题已验证有效。
+//      新增 win -a 锁定图形窗口，保证后续命令作用在图上。
+// =====================================================================
+
+string outdir$ = "G:\MD_useful\ice_analysis\origin_output";
+
+// ---- 1. 新建工作簿并导入 ----
+newbook name:="IceGrowth" sheet:=1;
+impasc fname:="G:\MD_useful\ice_analysis\origin_data\origin_thickness.csv";
+
+// ---- 2. 第 1 列设为 X ----
+wks.col1.type = 4;
+
+// ---- 3. 线+符号图（X=第1列，Y=第2..5列）----
+plotxy iy:=(1,2:5) plot:=202;
+
+// ---- 4. 轴标题 ----
+xb.text$ = "t (ns)";
+yl.text$ = "Ice thickness (nm)";
+
+// ---- 5. 导出 PNG ----
+expGraph type:=png path:=outdir$ filename:="ice_growth" overwrite:=replace;
+type "PNG exported to " + outdir$;
+
+type "plot_ice.ogs finished";
