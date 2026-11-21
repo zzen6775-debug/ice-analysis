@@ -1,0 +1,24 @@
+// =====================================================================
+// Ice amount vs time  (continuous measure, no bin quantisation)
+//
+// 用法：run.file("完整路径\plot_ice_amount.ogs")
+//
+// 数据：origin_data\origin_ice_amount.csv
+//   ice_amount = ∫(冰分子占比)dz，单位 nm，等价于"冰的等效厚度"。
+//   与 thickness 的区别：界面是弥散的，按比例计入，所以数值略小；
+//   但它没有任何分箱量化，是最稳健的生长量。
+// =====================================================================
+
+newbook name:="IceAmount" sheet:=1;
+impasc fname:="G:\MD_useful\ice_analysis\origin_data\origin_ice_amount.csv";
+
+wks.col1.type = 4;
+
+plotxy iy:=(1,2:5) plot:=202;
+
+xb.text$ = "t (ns)";
+yl.text$ = "ice amount (nm)";
+
+expGraph type:=png path:="G:\MD_useful\ice_analysis\origin_output" filename:="ice_amount" overwrite:=replace;
+
+type "plot_ice_amount.ogs finished";

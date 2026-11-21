@@ -1,0 +1,25 @@
+// =====================================================================
+// Both ice fronts vs time, 8 curves, absolute z
+//
+// 用法：run.file("完整路径\plot_fronts_absolute.ogs")
+//
+// 数据：origin_data\origin_fronts_both.csv
+//
+// 警告：纵轴是绝对 z 坐标。各体系盒长不同（67.8-73.6 nm），冰板落在
+//       不同位置，所以跨体系比较请用 plot_fronts_centered.ogs。
+//       本图只适合看单个体系内部上下前沿是否对称。
+// =====================================================================
+
+newbook name:="FrontsAbsolute" sheet:=1;
+impasc fname:="G:\MD_useful\ice_analysis\origin_data\origin_fronts_both.csv";
+
+wks.col1.type = 4;
+
+plotxy iy:=(1,2:9) plot:=202;
+
+xb.text$ = "t (ns)";
+yl.text$ = "front position (nm)";
+
+expGraph type:=png path:="G:\MD_useful\ice_analysis\origin_output" filename:="fronts_absolute" overwrite:=replace;
+
+type "plot_fronts_absolute.ogs finished";

@@ -1,150 +1,87 @@
 # Ice Growth Analysis
 
-从 GROMACS 轨迹中定量分析**冰/水两相体系的冰前沿位置和生长速率**，并导出可直接在 Origin 中作图的表格。
+从 GROMACS 轨迹中定量分析**冰/水两相体系的冰前沿位置与生长速率**，并导出可直接在 Origin 中作图的表格。
 
 适用于板状/薄膜冰体系（一侧或两侧为过冷液态水），也可用于研究聚合物、离子、表面等对冰生长的影响。
 
-> 仓库为扁平的脚本集合，所有文件都在根目录，直接克隆即可使用。
+> 全部脚本平铺在根目录，克隆即可用。
 
 ---
 
 ## 目录
 
-- [功能](#功能)
-- [环境要求](#环境要求)
+- [快速开始](#快速开始)
 - [完整流程](#完整流程)
+- [两种生长量：thickness 与 ice amount](#两种生长量thickness-与-ice-amount)
 - [文件说明](#文件说明)
 - [方法学](#方法学)
-- [输出文件](#输出文件)
 - [Origin 作图](#origin-作图)
-- [常见问题](#常见问题)
-- [已知的坑](#已知的坑)
+- [踩过的坑](#踩过的坑)
 - [引用](#引用)
 
 ---
 
-## 功能
+## 快速开始
 
-| 能力 | 说明 |
-|---|---|
-| 抽帧 | 从 `.xtc` 轨迹中按指定时刻导出 `.gro` 构型 |
-| 序参量 | 计算每个水氧原子的四面体序参量 q |
-| 前沿定位 | 沿 z 方向扫描，确定下/上两个冰前沿的位置 |
-| 生长速率 | 分别拟合下前沿、上前沿和总增厚速率 |
-| 数据导出 | 生成 Origin 可直接导入的宽表 CSV |
-
----
-
-## 环境要求
-
-**本地分析（必需）**
-
-- Python ≥ 3.9
-- `numpy`、`scipy`
+仓库自带示例数据（4 个体系 × 2 ns 间隔），不用跑模拟就能验证环境：
 
 ```bash
 pip install -r requirements.txt
+
+# 用示例数据直接拟合
+python3 growth_fit.py fronts_track.csv --windows 0 20 40 60
 ```
-
-**集群抽帧（可选）**
-
-- 任意带 GROMACS 和 Slurm 的集群，脚本默认适配 `gmx_mpi`
-
-**作图（可选）**
-
-- Origin 2018 或更新版本（脚本在 Origin 2024 中文版验证）
 
 ---
 
 ## 完整流程
 
-### 步骤 1：在集群上抽帧
+### 1. 在集群上抽帧（每 2 ns，只取水氧）
 
-编辑 `extract_frames.sbatch`，按你的目录结构修改体系列表和抽取时刻：
+`extract_frames2.sbatch` 从 `npt_260K.xtc` 里每 2000 ps 取一帧，只导出水氧原子（q(z) 只需要 O 的位置，体积缩小到 1/4）。
 
-```bash
-# 体系目录:标签
-for pair in "HEMA_on_ice_slab:HEMA" "MMA_on_ice_slab:MMA" ...
-# 抽取时刻（ps）
-for t in 0 5000 10000 20000
-```
+抽帧需要一个只含水氧的索引文件，用 `make_ow_index.py` 生成（拓扑顺序是 SOL 在前，OW 为第 1、5、9… 个原子）：
 
 ```bash
-cd /scratch/YOUR_NAME/zsmx
-sbatch extract_frames.sbatch
+python3 make_ow_index.py                    # 生成 ow_<tag>.ndx
+scp ow_*.ndx extract_frames2.sbatch USER@HOST:/scratch/USER/zsmx/
+ssh USER@HOST "cd /scratch/USER/zsmx && sbatch extract_frames2.sbatch"
 ```
 
-帧会写到 `zsmx/_frames/`，并打包为 `frames.tar.gz`。
+**注意**：必须提交到计算节点（`--partition=pub`），不要在登录节点跑 `trjconv`。
 
-**注意**：务必提交到计算节点（`--partition=pub`），不要在登录节点跑 `trjconv`。
-
-### 步骤 2：取回本地
+### 2. 取回并分析
 
 ```bash
-scp USER@HOST:/scratch/USER/zsmx/_frames/frames.tar.gz .
+scp USER@HOST:/scratch/USER/zsmx/_frames2/frames2.tar.gz .
+bash run_pipeline.sh frames2.tar.gz
 ```
 
-### 步骤 3：计算前沿位置
+`run_pipeline.sh` 一路做完：解包 → 拆分 → 前沿定位 → 拟合 → 导出 Origin 表格。
 
-```bash
-python3 ice_front.py --frames frames/ --out fronts.csv
-```
+---
 
-输出示例：
+## 两种生长量：thickness 与 ice amount
 
-```
-  HEMA       t=  0.00 ns  ice 32.0–35.0 nm (3.0 nm)  chains 26.84/40.26
-  HEMA       t=  5.00 ns  ice 31.0–35.0 nm (4.0 nm)  chains 26.86/40.31
-  HEMA       t= 10.00 ns  ice 31.0–36.0 nm (5.0 nm)  chains 26.81/40.17
-  HEMA       t= 20.00 ns  ice 30.0–37.0 nm (7.0 nm)  chains 26.76/40.31
-```
+| 量 | 定义 | 优点 | 缺点 |
+|---|---|---|---|
+| `thickness` | q 首次超过阈值处的 z 上界 − 下界 | 直观，与"冰层厚度"对应 | 界面层被当成纯冰，且受分箱量化影响 |
+| `ice_amount` | ∫(冰分子占比) dz | **完全连续，无量化误差** | 数值比 thickness 小约 25%（界面按比例计入） |
 
-| 参数 | 默认 | 含义 |
+**两者都是合法的速率定义，但必须统一使用，不能混着比较。**
+
+推荐把 `ice_amount` 作为主指标：它不需要定位前沿，因此对噪声和分箱完全不敏感，R² 通常 > 0.96。
+
+示例结果（4 个体系，0–66 ns，每 2 ns）：
+
+| 体系 | v_thickness (nm/ns) | v_ice_amount (nm/ns) |
 |---|---|---|
-| `--frames` | 必需 | 含 `<标签>_<时刻>ps.gro` 的目录 |
-| `--out` | `fronts.csv` | 输出 CSV |
-| `--bin` | `1.0` | z 方向分箱宽度（nm） |
-| `--cut` | `0.35` | 第一壳层截断半径（nm） |
-| `--qcut` | `0.85` | 判定为冰的 q 阈值 |
+| HEMA | 0.2050 ± 0.002 | 0.1521 |
+| MMA | 0.1885 ± 0.001 | 0.1386 |
+| PMMA10 | 0.2075 ± 0.003 | 0.1528 |
+| PMMA20 | **0.1531 ± 0.006** | **0.1142** |
 
-### 步骤 4：拟合生长速率
-
-```bash
-python3 growth_fit.py fronts.csv
-```
-
-```
-system       v_total (nm/ns)   v_per_front     R^2   v_lower   v_upper   n
-HEMA              0.2000±0.000      0.1000   1.000    0.0714    0.1286   3
-MMA               0.1429±0.049      0.0714   0.893    0.0714    0.0714   3
-```
-
-- `v_total`：冰层总增厚速率
-- `v_lower` / `v_upper`：下/上前沿各自的推进速率，**推荐分别报告**
-
-```bash
-python3 growth_fit.py fronts.csv --piecewise    # 尝试一个折点
-python3 growth_fit.py fronts.csv --plot out.png # 出图（需 matplotlib）
-python3 growth_fit.py fronts.csv --tube 10      # 只拟合 t >= 10 ns
-```
-
-### 步骤 5：导出 Origin 表格
-
-```bash
-python3 export_for_origin.py fronts.csv --outdir origin_data
-```
-
-### 一键流程（可选）
-
-`run_analysis.sh` 把"取帧 → 分析 → 拟合"串起来：
-
-```bash
-# 本地已有 tarball
-bash run_analysis.sh frames.tar.gz
-
-# 直接从集群拉
-HPC_HOST=user@host HPC_KEY=~/.ssh/id_rsa bash run_analysis.sh /scratch/user/zsmx/_frames/frames.tar.gz
-```
+两个指标给出同一排序：PMMA20 慢 20–25%。
 
 ---
 
@@ -152,21 +89,22 @@ HPC_HOST=user@host HPC_KEY=~/.ssh/id_rsa bash run_analysis.sh /scratch/user/zsmx
 
 | 文件 | 作用 |
 |---|---|
-| `ice_front.py` | 逐帧计算 q(z)、冰层范围、两个前沿位置、聚合物位置 |
-| `growth_fit.py` | 从 CSV 拟合生长速率（线性 / 分段），可出图 |
-| `export_for_origin.py` | 生成 Origin 可直接导入的宽表 |
-| `run_analysis.sh` | 一键串起"取帧 → 分析 → 拟合" |
-| `extract_frames.sbatch` | 集群端抽帧作业 |
-| `plot_ice.ogs` | Origin LabTalk：厚度曲线作图 + 导出 PNG |
-| `plot_fronts_both.ogs` | Origin LabTalk：上下两个前沿同时作图 |
-| `fronts.csv` | **示例数据**（4 体系 × 4 时刻），可直接拿来试跑 |
-| `fronts.csv.qprofile` | 示例 q(z) 剖面数据 |
-
-试跑示例数据：
-
-```bash
-python3 growth_fit.py fronts.csv
-```
+| `ice_front.py` | 基础模块：读 `.gro`、算四面体序参量 q |
+| `fronts_track.py` | **主分析**：0.2 nm 网格 + 锚点窗口搜索 + 插值，给出亚纳米前沿位置和 ice amount |
+| `growth_fit.py` | 线性/分段拟合，`--windows` 出分窗口斜率 |
+| `export_for_origin.py` | 生成 Origin 宽表 |
+| `centre_fronts.py` | 把前沿位置平移到各自的冰板中心 |
+| `split_frames.py` | 多帧 `.gro` 拆成单帧 |
+| `make_ow_index.py` | 生成只含水氧的 GROMACS 索引文件 |
+| `run_pipeline.sh` | 一键流程 |
+| `extract_frames2.sbatch` | 集群端抽帧（每 2 ns，只取 OW） |
+| `plot_thickness.ogs` | Origin：冰层厚度 |
+| `plot_ice_amount.ogs` | Origin：冰量积分（推荐） |
+| `plot_fronts_centered.ogs` | Origin：8 条前沿，**按冰板中心居中**（推荐） |
+| `plot_fronts_absolute.ogs` | Origin：8 条前沿，绝对 z（仅限单体系内部比较） |
+| `fronts_track.csv` | 示例输出 |
+| `origin_fronts_centered.csv` | 示例 Origin 表（居中前沿） |
+| `origin_ice_amount.csv` | 示例 Origin 表（冰量） |
 
 ---
 
@@ -174,150 +112,80 @@ python3 growth_fit.py fronts.csv
 
 ### 四面体序参量
 
-对每个水氧原子 $i$，取截断半径内的邻居，对所有邻居对 $(j,k)$ 的夹角求和：
+对每个水氧原子 $i$，取截断半径（0.35 nm）内的邻居，对所有邻居对 $(j,k)$ 的夹角求和：
 
 $$
 q_i = 1 - \frac{3}{8}\sum_{j<k}\left(\cos\theta_{jik} + \frac{1}{3}\right)^2
 $$
 
-| 状态 | q 值 |
+| 状态 | q |
 |---|---|
 | 理想四面体 | 1.0 |
-| 冰（TIP4P/Ice，本体系实测） | 0.94 – 0.95 |
+| 冰（TIP4P/Ice 实测） | 0.94 – 0.95 |
 | 过冷液态水 | 0.75 – 0.80 |
 
-### 冰相判据
+冰相判据：q > 0.85，且该分箱内至少 8 个水分子。
 
-某个 z 分箱内满足两条即视为冰：
+### 前沿定位：锚点跟踪
 
-1. 平均 q > `qcut`（默认 0.85）
-2. 该分箱内至少 20 个水分子
+1. 第一帧：取**最长的一段连续冰分箱**作为初始冰区
+2. 后续帧：以上一帧的前沿位置为锚点，只在 **±1.2 nm 窗口**内搜索冰/水边界
+3. 边界位置由 q 跨越 0.85 处的**线性插值**给出（亚 0.2 nm 精度）
 
-### 前沿定义
-
-沿 z 扫描所有分箱，取**最长的一段连续冰分箱**，下边界为下前沿、上边界为上前沿。这样可避免把远处孤立的六元环误判成冰。
+这样既避免了全局搜索导致的"跳带"，又没有整纳米量化。
 
 ### 生长速率
 
-对前沿位置 $z(t)$ 做线性拟合，斜率即推进速率；下前沿斜率为负（向下推进），取绝对值报告。
-
----
-
-## 输出文件
-
-### `fronts.csv`
-
-| 列 | 含义 |
-|---|---|
-| `system` | 体系标签 |
-| `t_ns` | 时间（ns） |
-| `n_waters` | 水分子数 |
-| `box_z` | 盒子 z 长度（nm） |
-| `ice_lo` / `ice_hi` | 下 / 上冰前沿位置（nm） |
-| `thickness` | 冰层厚度 = `ice_hi - ice_lo` |
-| `chainA_z` / `chainB_z` | 两条聚合物链的 z 中位数 |
-| `gapA` / `gapB` | 链 A 到下前沿、链 B 到上前沿的距离 |
-
-### `fronts.csv.qprofile`
-
-| 列 | 含义 |
-|---|---|
-| `system`, `t_ns` | 体系与时刻 |
-| `z_nm` | z 坐标 |
-| `q` | 该分箱平均 q |
-| `ice_fraction` | 该分箱 q > qcut 的分子占比 |
-
-### `origin_data/`
-
-| 文件 | 内容 |
-|---|---|
-| `origin_thickness.csv` | 冰层厚度 vs 时间 |
-| `origin_front_lower.csv` | 下前沿位置 vs 时间 |
-| `origin_front_upper.csv` | 上前沿位置 vs 时间 |
-| `origin_fronts_both.csv` | 8 列：4 体系 × 上下前沿 |
-| `origin_gap_chainA.csv` / `origin_gap_chainB.csv` | 聚合物到前沿的距离 |
-| `origin_qprofile_<T>ns.csv` | 各时刻的 q(z) 剖面 |
+对前沿位置或冰量做线性拟合，斜率即速率。下前沿斜率为负，取绝对值报告。
 
 ---
 
 ## Origin 作图
 
-### 方式 A：跑现成脚本（推荐）
+LabTalk 脚本**必须用完整字面路径**——X-Function 参数不支持 `a$ + b$` 拼接。
 
-1. 用记事本打开 `plot_ice.ogs`，改第一行的数据根目录：
+每个脚本顶部有两行路径需要改成你自己的数据目录：
 
-   ```labtalk
-   string root$ = "你的数据目录";
-   ```
+```labtalk
+impasc fname:="你的目录\origin_data\origin_thickness.csv";
+expGraph type:=png path:="你的输出目录" filename:="ice_thickness" overwrite:=replace;
+```
 
-2. Origin 中按 `Shift+F3` 打开**命令窗口**，输入：
+然后 Origin 里按 `Shift+F3` 打开命令窗口：
 
-   ```
-   run.file("完整路径\plot_ice.ogs")
-   ```
+```
+run.file("完整路径\plot_ice_amount.ogs")
+```
 
-3. 脚本自动完成：新建工作簿 → 导入 → 设 X 列 → 线+符号图 → 设轴标题 → 导出 PNG 到 `<root$>\origin_output\`。
+### 手动作图
 
-`plot_fronts_both.ogs` 用法相同，画上下两个前沿共 8 条曲线。
-
-### 方式 B：手动
-
-1. `文件 > 导入 > 逗号分隔(CSV)`（**必须激活工作簿窗口**；图窗口激活时菜单里没有"导入"）
+1. `文件 > 导入 > 逗号分隔(CSV)`（**必须激活工作簿窗口**，图窗口激活时没有"导入"）
 2. 右键第一列 → `设置为 > X`
 3. 选中所有 Y 列 → `绘图 > 基础2D图 > 线+符号图`
-4. 双击轴标题改成你要的文字（默认会用第一个 Y 列的长名称）
+4. 双击轴标题手动改文字（默认会用第一个 Y 列的长名称）
 5. `文件 > 导出图形`
 
 ---
 
-## 常见问题
+## 踩过的坑
 
-**Q：纵轴标题显示成第一个体系的名字？**
+1. **整纳米台阶**：1 nm 分箱把前沿量化成整数，2 ns 间隔内只推进约 0.2 nm，导致多个点落在同一台阶上。解决办法是锚点跟踪 + 插值，而不是单纯细化分箱。
 
-Origin 默认用第一列的长名称作纵轴标题。用 LabTalk 覆盖：
+2. **细网格 + 全局"最长段"会跳带**：0.2 nm 网格下噪声放大，最长连续段会在候选之间切换，前沿位置突跳几纳米（实测出现过 30 nm 的跳变）。必须用锚点窗口约束搜索范围。
 
-```
-xb.text$ = "t (ns)";
-yl.text$ = "Ice thickness (nm)";
-```
+3. **索引基准错误最阴险**：从窗口切片取出的相对索引若当成绝对分箱号使用，前沿会永远落在盒子边缘（z ≈ 1.2 nm），而且表面上看还"有数据"。判断标准：每个体系的不同位置数应接近帧数，最大单步应远小于窗口宽度。
 
-或直接双击轴标题手动改。
+4. **绝对 z 不能跨体系比较**：降温后盒长不同（67.8–73.6 nm），同一个冰板落在不同绝对 z 上。必须先减去各自的冰板中心（见 `centre_fronts.py`）。
 
-**Q：`plotxy iy:=2:5` 报错？**
+5. **两点/三点拟合的 R² 是假象**：`R² = 1.000` 往往只是点太少恰好共线。`growth_fit.py` 现在要求每段至少 3 个点。
 
-语法要写成 `(1,2:5)`：X 取第 1 列，Y 取第 2–5 列。
+6. **分段拟合总能找到"拐点"**：拐点位置是拟合参数，在量化数据上尤其不稳定。改用固定窗口斜率（`--windows`）判断趋势更可靠。
 
-**Q：`impasc` 报 `Failed to resolve tree node ... names.FNameToLabels`？**
+7. **`.gro` 是定宽格式**：原子数超过 99999 时原子名与编号粘连，必须按列切片，不能用 `split()`。
 
-新版 Origin 的导入选项树路径变了，去掉 `options.*` 只保留 `fname:=`。
+8. **`-pbc whole` 会把原子推出盒子**：KD 树会报 `Some input data are greater than the size of the periodic box`，脚本里已做 `% box` 折回。
 
-**Q：`yl.from = 0` 报 `illegal name`？**
-
-2024 版不支持该属性名，删掉该行，在图上双击轴手动设范围。
-
-**Q：一条 LabTalk 命令报错后，后面的命令都不执行？**
-
-LabTalk 顺序执行、遇错即停。先用单行命令逐个验证，再合成脚本。
-
-**Q：导入菜单里找不到"导入"？**
-
-当前激活的是图窗口。先点工作簿让它是活动窗口，`文件 > 导入` 才会出现。
-
----
-
-## 已知的坑
-
-1. **分辨率陷阱**：前沿推进约 0.1 nm/ns，1 nm 分箱下 **2 ns 内只有 0.2 nm 位移，看不出来**。至少需要 10 ns 的数据点才能分辨趋势。
-
-2. **`-pbc whole` 让原子跑出盒子**：KD 树会报 `Some input data are greater than the size of the periodic box`，脚本已做 `% box` 折回。
-
-3. **`.gro` 是定宽格式**：原子数超过 99999 时原子名会与编号粘连，必须按列切片（`[10:15]`、`[20:28]`…），不能用 `split()`。
-
-4. **分箱边缘效应**：前沿恰在分箱边界时厚度会跳变整 1 nm，判断趋势要看多时间点的单调性。
-
-5. **上下前沿必须分开看**：两个前沿到障碍物的距离往往不同，合并成厚度曲线会把"一侧被封住、另一侧继续长"的效应平均掉。
-
-6. **两点拟合没有意义**：`R² = 1.000` 常常只是点太少恰好共线，不能当成拟合良好的证据。
+9. **LabTalk 不支持字符串拼接**：`impasc fname:=root$ + "\a.csv"` 会报 `value + is missing a variable name`，必须写完整字面路径。
 
 ---
 
@@ -326,8 +194,6 @@ LabTalk 顺序执行、遇错即停。先用单行命令逐个验证，再合成
 - 四面体序参量：Chau P.-L., Hardwick A. J. *Mol. Phys.* **1998**, 93, 511.
 - TIP4P/Ice 水模型：Abascal J. L. F. et al. *J. Chem. Phys.* **2005**, 122, 234511.
 
----
-
 ## 许可
 
-MIT License，见 `LICENSE`。
+MIT，见 `LICENSE`。

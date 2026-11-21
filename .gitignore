@@ -7,15 +7,20 @@ venv/
 
 # generated analysis outputs
 origin_data/
+origin_data_*/
 origin_output/
 frames/
-fronts.csv.qprofile
+*.qprofile
 
 # GROMACS frames and binaries
 *.gro
 *.xtc
 *.trr
-frames.tar.gz
+*.tpr
+*.edr
+*.cpt
+frames*.tar.gz
+ow_*.ndx
 
 # Origin project files
 *.opju
@@ -26,5 +31,5 @@ frames.tar.gz
 Thumbs.db
 desktop.ini
 
-# NOTE: fronts.csv at the repository root is the bundled sample data and is
-# intentionally tracked. Generated results go to origin_data/ and are ignored.
+# NOTE: fronts_track.csv, origin_fronts_centered.csv and origin_ice_amount.csv
+# at the repository root are bundled sample data and are tracked on purpose.

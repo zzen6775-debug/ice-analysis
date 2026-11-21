@@ -24,6 +24,7 @@ def load(path):
                     return float("nan")
             rows.append(dict(system=r["system"], t=num("t_ns"),
                              thick=num("thickness"), lo=num("ice_lo"), hi=num("ice_hi"),
+                             amount=num("ice_amount"),
                              cA=num("chainA_z"), cB=num("chainB_z"),
                              gapA=num("gapA"), gapB=num("gapB")))
     rows.sort(key=lambda r: (r["system"], r["t"]))
@@ -70,6 +71,7 @@ def main():
     print("writing Origin tables:")
 
     write_wide(rows, "thick", os.path.join(a.outdir, "origin_thickness.csv"), "t_ns")
+    write_wide(rows, "amount", os.path.join(a.outdir, "origin_ice_amount.csv"), "t_ns")
     write_wide(rows, "lo", os.path.join(a.outdir, "origin_front_lower.csv"), "t_ns")
     write_wide(rows, "hi", os.path.join(a.outdir, "origin_front_upper.csv"), "t_ns")
     write_wide(rows, "gapA", os.path.join(a.outdir, "origin_gap_chainA.csv"), "t_ns")

@@ -1,0 +1,26 @@
+// =====================================================================
+// Ice thickness vs time  (Origin LabTalk)
+//
+// 用法：Origin 命令窗口（Shift+F3）输入
+//     run.file("完整路径\plot_thickness.ogs")
+//
+// 数据来源：origin_data\origin_thickness.csv（由 export_for_origin.py 生成）
+// 列：t_ns, HEMA, MMA, PMMA10, PMMA20
+//
+// 注意：LabTalk 的 X-Function 参数不支持 "a$ + b$" 拼接，
+//       所以下面全部写成完整字面路径；换数据集时改这两行即可。
+// =====================================================================
+
+newbook name:="IceThickness" sheet:=1;
+impasc fname:="G:\MD_useful\ice_analysis\origin_data\origin_thickness.csv";
+
+wks.col1.type = 4;
+
+plotxy iy:=(1,2:5) plot:=202;          // 202 = 线+符号
+
+xb.text$ = "t (ns)";
+yl.text$ = "ice thickness (nm)";
+
+expGraph type:=png path:="G:\MD_useful\ice_analysis\origin_output" filename:="ice_thickness" overwrite:=replace;
+
+type "plot_thickness.ogs finished";

@@ -1,0 +1,26 @@
+// =====================================================================
+// Both ice fronts vs time, 8 curves, centred on each slab's own middle
+//
+// 用法：run.file("完整路径\plot_fronts_centered.ogs")
+//
+// 数据：origin_data\origin_fronts_centered.csv
+//   由 centre_fronts.py 生成：纵轴是相对各自 t=0 冰板中心的位移（nm），
+//   下前沿为负、上前沿为正。
+//
+//   为什么必须居中：各体系降温后盒长不同（67.8-73.6 nm），同一个冰板
+//   落在不同的绝对 z 上，直接画绝对位置会把无关的线画到一起。
+// =====================================================================
+
+newbook name:="FrontsCentred" sheet:=1;
+impasc fname:="G:\MD_useful\ice_analysis\origin_data\origin_fronts_centered.csv";
+
+wks.col1.type = 4;
+
+plotxy iy:=(1,2:9) plot:=202;
+
+xb.text$ = "t (ns)";
+yl.text$ = "front displacement from slab centre (nm)";
+
+expGraph type:=png path:="G:\MD_useful\ice_analysis\origin_output" filename:="fronts_centered" overwrite:=replace;
+
+type "plot_fronts_centered.ogs finished";

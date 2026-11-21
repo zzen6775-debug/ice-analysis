@@ -43,7 +43,7 @@ def read_csv(path):
 def linfit(x, y):
     x, y = np.asarray(x), np.asarray(y)
     ok = np.isfinite(x) & np.isfinite(y)
-    if ok.sum() < 2:
+    if ok.sum() < 3:            # polyfit cov needs more points than the order
         return np.nan, np.nan, np.nan
     p, cov = np.polyfit(x[ok], y[ok], 1, cov=True)
     resid = y[ok] - np.polyval(p, x[ok])
@@ -82,6 +82,8 @@ def main():
     ap.add_argument("--plot", default=None)
     ap.add_argument("--tube", type=float, default=0.5,
                     help="only fit t >= this value (skip the initial transient)")
+    ap.add_argument("--windows", type=float, nargs="*", default=None,
+                    help="also report the slope in fixed windows, e.g. --windows 20 40 60")
     a = ap.parse_args()
 
     data = read_csv(a.csv)
@@ -107,6 +109,23 @@ def main():
                 _, tstar, s1, s2 = best
                 print(f"{'':10}  piecewise: v_total {s1:.4f} nm/ns before t*={tstar:.1f} ns, "
                       f"{s2:.4f} nm/ns after")
+
+    if a.windows:
+        edges = list(a.windows)
+        print()
+        print("window slopes (nm/ns), thickness:")
+        print(f"{'system':<10}" + "".join(f"{edges[i]:.0f}-{edges[i+1]:.0f}".rjust(12)
+                                           for i in range(len(edges) - 1)))
+        for sys_, (t, th, _s) in results.items():
+            row = f"{sys_:<10}"
+            for i in range(len(edges) - 1):
+                sel = (t >= edges[i]) & (t < edges[i + 1])
+                if sel.sum() >= 4:
+                    k, _e, _r = linfit(t[sel], th[sel])
+                    row += f"{k:12.4f}"
+                else:
+                    row += f"{'-':>12}"
+            print(row)
 
     if a.plot:
         try:
