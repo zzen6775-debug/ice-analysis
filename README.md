@@ -167,6 +167,36 @@ run.file("完整路径\plot_ice_amount.ogs")
 
 ---
 
+## 断点续跑（当 mdrun 因为数值不稳定中断时）
+
+长轨迹里偶尔会有 `Too many LINCS warnings` 导致 mdrun 退出。用 checkpoint 续跑即可，
+但要遵守两条：
+
+1. **续跑必须带 `-cpi <deffnm>.cpt -append`**，否则会从头开始，丢掉已有进度。
+2. **参数不能改**（步长、约束、压浴、参考坐标文件），否则 grompp 会拒绝，或者物理状态被破坏。
+
+一个实用的重试策略（见 `extract_frames2.sbatch` 同目录的思路，实际写在运行脚本里）：
+
+```
+最多 40 次尝试，每次从最新 checkpoint 续跑；
+若连续 3 次各自推进 < 0.2 ns，则停止并报告——这个模式说明是真卡住，
+不是运气不好，继续磨只会白烧机时。
+```
+
+### 续跑会不会破坏轨迹的连续性？
+
+不会。GROMACS 的 checkpoint 按**步数**记录，而 `nstxout-compressed` 也是按步数，
+续跑时帧网格天然对齐。用 `gmx check` 可以核实：
+
+```bash
+gmx check -f traj.xtc
+# Item        #frames   Timestep (ps)
+# Time          1799          10        <- 1799 帧 x 10 ps = 17980 ps
+```
+
+若 `#frames × 间隔` 恰好等于 `末时刻 − 首时刻`，说明**既没有缺失也没有重复**。
+一本 17.98 ns 的轨迹经历了 6 次 checkpoint 续跑，帧数依然精确吻合。
+
 ## 踩过的坑
 
 1. **整纳米台阶**：1 nm 分箱把前沿量化成整数，2 ns 间隔内只推进约 0.2 nm，导致多个点落在同一台阶上。解决办法是锚点跟踪 + 插值，而不是单纯细化分箱。
@@ -186,6 +216,8 @@ run.file("完整路径\plot_ice_amount.ogs")
 8. **`-pbc whole` 会把原子推出盒子**：KD 树会报 `Some input data are greater than the size of the periodic box`，脚本里已做 `% box` 折回。
 
 9. **LabTalk 不支持字符串拼接**：`impasc fname:=root$ + "\a.csv"` 会报 `value + is missing a variable name`，必须写完整字面路径。
+
+10. **不要从日志的 `Step/Time` 行推断轨迹是否重叠**：日志里最后一次 `Step/Time` 是**能量输出行**，不是崩溃点；续跑点可能比它晚一个帧间隔，看起来像"缺口"，其实完全连续。判断依据只能是 `gmx check -f traj.xtc` 的帧数与时间跨度是否自洽。
 
 ---
 
